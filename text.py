@@ -1,12 +1,26 @@
 from cv2 import cv2
-#import numpy as np
+import numpy as np
 
-def read(payload_dir):
-    return cv2.imread(payload_dir)
+import time
+
+def search_pattern(arr, pattern):
+    pattern_length = len(pattern)
+    possible_matches = np.where(arr == pattern[0])[0]
+
+    matches = []
+
+    for possible in possible_matches:
+        check = arr[possible : possible + pattern_length]
+
+        if np.all(check == pattern):
+            matches.append(possible)
+
+    return matches
+
 
 def encode(payload_dir, out_dir, enigma, terminator):
     # Read image
-    image = read(payload_dir)
+    image = cv2.imread(payload_dir)
     rows = image.shape[0]
     cols = image.shape[1]
     chan = image.shape[2]
@@ -15,7 +29,7 @@ def encode(payload_dir, out_dir, enigma, terminator):
     enigma += terminator
 
     # Image must have sufficient bytes
-    enigma = ''.join([ format(ord(i), "08b") for i in enigma ])
+    enigma = "".join([ format(ord(i), "08b") for i in enigma ])
     needed_bytes = len(enigma)
     vacant_bytes = rows * cols * chan // 8
 
@@ -46,36 +60,35 @@ def encode(payload_dir, out_dir, enigma, terminator):
 
 def decode(payload_dir, terminator):
     # Read image
-    image = read(payload_dir)
+    image = cv2.imread(payload_dir)
     rows = image.shape[0]
     cols = image.shape[1]
     chan = image.shape[2]
 
-    data = ""
+    number_of_bytes = rows * cols * chan
+    terminator_bytes = np.array([ord(char) for char in terminator], dtype=np.uint8)
+
+
+
+    
+
+    # 8bit integer array because only stores 0 and 1
+    data = np.empty(number_of_bytes, dtype=np.int8) 
+
+    start_time = time.time()
 
     # For each bit in image, store the LSB
+    index = 0
     for row in range(rows):
         for col in range(cols):
             for h in range(chan):
-                v = format(image[row][col][h], "08b")
-                data += v[-1]
+                data[index] = np.unpackbits(image[row][col][h])[-1]
+                index += 1
 
-    print(len(data), rows, cols, chan)
+    packed = np.packbits(data)
+    terminator_index = search_pattern(packed, terminator_bytes)[-1]
 
-    # Group the 8th bits together
-    all_bytes = [ data[i:i+8] for i in range(0, len(data), 8) ]
+    decoded_data = packed[:terminator_index].tostring().decode("ascii")
 
-    print(len(all_bytes))
-
-    # Translate binary to char
-    decoded_data = ""
-    for byte in all_bytes:
-        decoded_data += chr(int(byte, 2))
-        if decoded_data[-(len(terminator)):] == terminator:
-            break
-
-    decoded_data = decoded_data[:-(len(terminator))]
-
-    # Output data
     print(decoded_data)
     
